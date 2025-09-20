@@ -1,4 +1,3 @@
-// components/Login.js
 import React, { useState, useEffect } from "react";
 import Toast from "react-native-toast-message";
 import { useDispatch, useSelector } from "react-redux";
@@ -11,6 +10,8 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 
 export default function Login({ navigation }) {
@@ -18,7 +19,9 @@ export default function Login({ navigation }) {
   const [password, setPassword] = useState("");
 
   const dispatch = useDispatch();
-  const { loading, error, isAuthenticated } = useSelector((state) => state.auth);
+  const { loading, error, isAuthenticated } = useSelector(
+    (state) => state.auth
+  );
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -43,47 +46,61 @@ export default function Login({ navigation }) {
     }
   }, [error, dispatch]);
 
-  const handleLogin = async () => {
+  const handleLogin = () => {
     if (!email || !password) {
       Alert.alert("Error", "Please fill in all fields");
       return;
     }
-
     dispatch(loginUser({ email, password }));
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Login</Text>
-      <TextInput
-        placeholder="Email"
-        style={styles.input}
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-      />
-      <TextInput
-        placeholder="Password"
-        style={styles.input}
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
-      <TouchableOpacity
-        style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={handleLogin}
-        disabled={loading}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={{ flex: 1, justifyContent: "center" }}
       >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Login</Text>
-        )}
-      </TouchableOpacity>
+        <Text style={styles.appName}>Abhishek's App</Text>
+        <Text style={styles.subtitle}>Sign in to continue</Text>
 
-      <TouchableOpacity onPress={() => navigation.navigate("Signup")}>
-        <Text style={styles.linkText}>Don't have an account? Sign Up</Text>
-      </TouchableOpacity>
+        <View style={styles.inputContainer}>
+          <TextInput
+            placeholder="Email"
+            placeholderTextColor="#666"
+            style={styles.input}
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+          />
+          <TextInput
+            placeholder="Password"
+            placeholderTextColor="#666"
+            style={styles.input}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+        </View>
+
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleLogin}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Login</Text>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={() => navigation.navigate("Signup")}>
+          <Text style={styles.linkText}>
+            Don’t have an account?{" "}
+            <Text style={{ fontWeight: "bold" }}>Sign Up</Text>
+          </Text>
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -91,32 +108,66 @@ export default function Login({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
+    backgroundColor: "#FFF5F5", // Soft pink background
     padding: 20,
-    backgroundColor: "#fff",
   },
-  title: {
-    fontSize: 24,
+  appName: {
+    fontSize: 32,
     fontWeight: "bold",
-    marginBottom: 20,
+    color: "#E57373",
     textAlign: "center",
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: "#555",
+    textAlign: "center",
+    marginBottom: 30,
+  },
+  inputContainer: {
+    marginBottom: 20,
   },
   input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 10,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 15,
     marginBottom: 15,
-    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    // Shadow for iOS
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    // Shadow for Android
+    elevation: 2,
   },
   button: {
     backgroundColor: "#E57373",
     padding: 15,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: "center",
+    marginTop: 10,
+    // Shadow for iOS
+    shadowColor: "#E57373",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    // Shadow for Android
+    elevation: 5,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
-  buttonText: { color: "#fff", fontWeight: "bold" },
-  linkText: { color: "#007AFF", marginTop: 15, textAlign: "center" },
+  buttonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+  linkText: {
+    color: "#007AFF",
+    marginTop: 20,
+    textAlign: "center",
+    fontSize: 15,
+  },
 });

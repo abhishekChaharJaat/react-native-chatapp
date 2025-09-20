@@ -23,7 +23,9 @@ import {
   addLocalMessage,
   deleteMessage,
   sendImageMessage,
+  removeDeletedMessage,
 } from "../store/messagesSlice";
+import socketService from "../services/socketService";
 
 export default function ChatPage({ route, navigation }) {
   const user = route?.params?.user;
@@ -37,7 +39,10 @@ export default function ChatPage({ route, navigation }) {
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = useState("");
   const [selectedImageMessage, setSelectedImageMessage] = useState(null);
+  const [isTyping, setIsTyping] = useState(false);
+  const [userOnlineStatus, setUserOnlineStatus] = useState(false);
   const flatListRef = useRef();
+  const typingTimeoutRef = useRef(null);
 
   // Get messages for this user from Redux store
   const messages = messagesList[user?.id] || [];
@@ -48,6 +53,93 @@ export default function ChatPage({ route, navigation }) {
       dispatch(fetchMessages(user.id));
     }
   }, [dispatch, user?.id]);
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    if (messages.length > 0) {
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    }
+  }, [messages.length]);
+
+  // Set up WebSocket listeners for this specific chat
+  useEffect(() => {
+    // Note: Incoming messages are handled globally in App.js
+    // Here we only need to handle typing and online status for this specific user
+
+    // Listen for user online status
+    const handleUserOnline = (userId) => {
+      if (userId === user?.id) {
+        setUserOnlineStatus(true);
+      }
+    };
+
+    const handleUserOffline = (userId) => {
+      if (userId === user?.id) {
+        setUserOnlineStatus(false);
+      }
+    };
+
+    // Listen for typing indicators
+    const handleUserTyping = (userId) => {
+      if (userId === user?.id) {
+        setIsTyping(true);
+      }
+    };
+
+    const handleUserStoppedTyping = (userId) => {
+      if (userId === user?.id) {
+        setIsTyping(false);
+      }
+    };
+
+    // Handle remote message deletion
+    const handleMessageDeleted = (data) => {
+      const { messageId, deletedBy } = data;
+      // If the deletion is from the user we're chatting with
+      if (deletedBy === user?.id) {
+        dispatch(removeDeletedMessage({ messageId, chatId: user?.id }));
+      }
+    };
+
+    // Add listeners (not including receive_message as it's handled globally)
+    socketService.addListener('user_online', handleUserOnline);
+    socketService.addListener('user_offline', handleUserOffline);
+    socketService.addListener('user_typing', handleUserTyping);
+    socketService.addListener('user_stopped_typing', handleUserStoppedTyping);
+    socketService.addListener('message_deleted', handleMessageDeleted);
+
+    // Cleanup listeners on unmount
+    return () => {
+      socketService.removeListener('user_online', handleUserOnline);
+      socketService.removeListener('user_offline', handleUserOffline);
+      socketService.removeListener('user_typing', handleUserTyping);
+      socketService.removeListener('user_stopped_typing', handleUserStoppedTyping);
+      socketService.removeListener('message_deleted', handleMessageDeleted);
+    };
+  }, [user?.id, dispatch]);
+
+  // Handle typing indicator
+  const handleTyping = (text) => {
+    setInputText(text);
+
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    if (text.length > 0) {
+      // Send typing indicator
+      socketService.startTyping(user?.id);
+
+      // Set timeout to stop typing indicator
+      typingTimeoutRef.current = setTimeout(() => {
+        socketService.stopTyping(user?.id);
+      }, 2000);
+    } else {
+      // Stop typing immediately if text is empty
+      socketService.stopTyping(user?.id);
+    }
+  };
 
   const handleSendMessage = async () => {
     if (!inputText.trim()) return;
@@ -69,10 +161,19 @@ export default function ChatPage({ route, navigation }) {
     const currentMessage = inputText;
     setInputText("");
 
+    // Stop typing indicator
+    socketService.stopTyping(user?.id);
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Send message via WebSocket for real-time delivery
+    socketService.sendMessage(user?.id, currentMessage, currentUser?.id);
+
     // Scroll to bottom after sending
     setTimeout(() => flatListRef.current.scrollToEnd({ animated: true }), 100);
 
-    // Dispatch Redux action to send message to API
+    // Dispatch Redux action to send message to API (for persistence)
     dispatch(
       sendMessage({
         receiverId: user?.id || "default-receiver",
@@ -81,7 +182,7 @@ export default function ChatPage({ route, navigation }) {
     );
   };
 
-  const handleDeleteMessage = (messageId) => {
+  const handleDeleteMessage = (message) => {
     Alert.alert(
       "Delete Message",
       "Are you sure you want to delete this message?",
@@ -94,7 +195,12 @@ export default function ChatPage({ route, navigation }) {
           text: "Delete",
           style: "destructive",
           onPress: () => {
-            dispatch(deleteMessage({ messageId, chatId: user?.id }));
+            // Use mongoId if available (for fetched messages), otherwise use id (for local messages)
+            const deleteId = message.mongoId || message.id;
+            dispatch(deleteMessage({ messageId: deleteId, chatId: user?.id }));
+
+            // Notify the other user via WebSocket
+            socketService.notifyMessageDeletion(user?.id, deleteId);
           },
         },
       ]
@@ -216,10 +322,16 @@ export default function ChatPage({ route, navigation }) {
             text: "Delete",
             style: "destructive",
             onPress: () => {
+              // Use mongoId if available (for fetched messages), otherwise use id (for local messages)
+              const deleteId = selectedImageMessage.mongoId || selectedImageMessage.id;
               dispatch(deleteMessage({
-                messageId: selectedImageMessage.id,
+                messageId: deleteId,
                 chatId: user?.id
               }));
+
+              // Notify the other user via WebSocket
+              socketService.notifyMessageDeletion(user?.id, deleteId);
+
               closeImageViewer();
             },
           },
@@ -262,7 +374,7 @@ export default function ChatPage({ route, navigation }) {
             isImageMessage && styles.imageMessageContainer,
             isImageMessage ? { alignSelf: 'flex-end', marginRight: 10 } : { alignSelf: 'flex-end' },
           ]}
-          onLongPress={() => handleDeleteMessage(item.id)}
+          onLongPress={() => handleDeleteMessage(item)}
           delayLongPress={500}
         >
           <MessageContent />
@@ -299,9 +411,19 @@ export default function ChatPage({ route, navigation }) {
         <View style={styles.headerInfo}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{user.name.charAt(0)}</Text>
+            {userOnlineStatus && (
+              <View style={styles.onlineIndicator} />
+            )}
           </View>
 
-          <Text style={styles.chatHeaderText}>{user?.name || "Chat"}</Text>
+          <View>
+            <Text style={styles.chatHeaderText}>{user?.name || "Chat"}</Text>
+            {isTyping ? (
+              <Text style={styles.typingText}>typing...</Text>
+            ) : userOnlineStatus ? (
+              <Text style={styles.onlineText}>online</Text>
+            ) : null}
+          </View>
         </View>
       </View>
 
@@ -337,7 +459,7 @@ export default function ChatPage({ route, navigation }) {
           style={styles.input}
           placeholder="Type a message..."
           value={inputText}
-          onChangeText={setInputText}
+          onChangeText={handleTyping}
         />
         <TouchableOpacity
           style={[styles.sendButton, loading && styles.sendButtonDisabled]}
@@ -422,16 +544,37 @@ const styles = StyleSheet.create({
     backgroundColor: "#E57373",
     justifyContent: "center",
     alignItems: "center",
+    position: "relative",
   },
   avatarText: {
     fontSize: 14,
     fontWeight: "bold",
     color: "#fff", // text color
   },
+  onlineIndicator: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#4CAF50",
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    borderWidth: 2,
+    borderColor: "#007AFF",
+  },
   chatHeaderText: {
     fontSize: 18,
     fontWeight: "bold",
     color: "#fff",
+  },
+  typingText: {
+    fontSize: 12,
+    color: "#e0e0e0",
+    fontStyle: "italic",
+  },
+  onlineText: {
+    fontSize: 12,
+    color: "#e0e0e0",
   },
   chatStatus: {
     fontSize: 14,

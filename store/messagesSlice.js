@@ -127,7 +127,41 @@ const messagesSlice = createSlice({
     addLocalMessage: (state, action) => {
       const { chatId, message } = action.payload;
       if (!state.messagesList[chatId]) state.messagesList[chatId] = [];
-      state.messagesList[chatId].push(message);
+
+      // Check if message already exists to avoid duplicates
+      const exists = state.messagesList[chatId].some(msg =>
+        msg.id === message.id ||
+        (msg.text === message.text && msg.senderId === message.senderId &&
+         Math.abs(new Date(msg.timestamp) - new Date(message.timestamp)) < 1000)
+      );
+
+      if (!exists) {
+        state.messagesList[chatId].push(message);
+      }
+    },
+    addReceivedMessage: (state, action) => {
+      const { senderId, message } = action.payload;
+      if (!state.messagesList[senderId]) state.messagesList[senderId] = [];
+
+      // Check if message already exists to avoid duplicates
+      const exists = state.messagesList[senderId].some(msg =>
+        msg.id === message.id ||
+        (msg.text === message.text && msg.senderId === message.senderId &&
+         Math.abs(new Date(msg.timestamp) - new Date(message.timestamp)) < 1000)
+      );
+
+      if (!exists) {
+        state.messagesList[senderId].push(message);
+      }
+    },
+    removeDeletedMessage: (state, action) => {
+      const { messageId, chatId } = action.payload;
+      // Remove message from the chat
+      if (state.messagesList[chatId]) {
+        state.messagesList[chatId] = state.messagesList[chatId].filter(msg =>
+          msg.mongoId !== messageId && msg.id !== messageId
+        );
+      }
     },
     clearError: (state) => {
       state.error = null;
@@ -145,6 +179,8 @@ const messagesSlice = createSlice({
         const { userId, messages } = action.payload;
         state.messagesList[userId] = messages.map((msg, index) => ({
           id: msg._id || msg.messageId || `msg_${index}`,
+          mongoId: msg._id,  // Store MongoDB ID for deletion
+          messageId: msg.messageId,  // Store custom messageId as well
           text: msg.message || msg.text || "",
           senderId: msg.sender,
           timestamp: msg.timestamp,
@@ -202,5 +238,5 @@ const messagesSlice = createSlice({
   },
 });
 
-export const { addLocalMessage, clearError } = messagesSlice.actions;
+export const { addLocalMessage, addReceivedMessage, removeDeletedMessage, clearError } = messagesSlice.actions;
 export default messagesSlice.reducer;

@@ -23,6 +23,7 @@ export default function UserListPage({ navigation }) {
     (state) => state.users
   );
   const { isAuthenticated } = useSelector((state) => state.auth);
+  const { onlineUserIds } = useSelector((state) => state.onlineUsers);
 
   const handleUserPress = (user) => {
     navigation.navigate("Chat", { user });
@@ -69,31 +70,25 @@ export default function UserListPage({ navigation }) {
     dispatch(fetchUsers());
   };
 
-  const renderUser = ({ item }) => (
-    <TouchableOpacity
-      style={styles.userItem}
-      onPress={() => handleUserPress(item)}
-    >
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
-      </View>
-      <View style={styles.userInfo}>
-        <Text style={styles.userName}>{item.name}</Text>
-        {/* <Text style={styles.userEmail}>{item.email}</Text> */}
-      </View>
-      <View style={styles.statusContainer}>
-        <View
-          style={[
-            styles.statusDot,
-            item.status === "Online" && styles.online,
-            item.status === "Away" && styles.away,
-            item.status === "Offline" && styles.offline,
-          ]}
-        />
-        <Text style={styles.statusText}>{item.status}</Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const renderUser = ({ item }) => {
+    const isOnline = onlineUserIds.includes(item.id);
+
+    return (
+      <TouchableOpacity
+        style={styles.userItem}
+        onPress={() => handleUserPress(item)}
+      >
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
+          {isOnline && <View style={styles.onlineIndicator} />}
+        </View>
+        <View style={styles.userInfo}>
+          <Text style={styles.userName}>{item.name}</Text>
+          {isOnline && <Text style={styles.onlineStatus}>Online</Text>}
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -269,11 +264,23 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 15,
+    position: "relative",
   },
   avatarText: {
     color: "#fff",
     fontSize: 20,
     fontWeight: "bold",
+  },
+  onlineIndicator: {
+    position: "absolute",
+    bottom: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#4CAF50",
+    borderWidth: 2,
+    borderColor: "#fff",
   },
   userInfo: {
     flex: 1,
@@ -282,7 +289,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
-    marginBottom: 4,
+    marginBottom: 2,
+  },
+  onlineStatus: {
+    fontSize: 12,
+    color: "#4CAF50",
+    fontWeight: "500",
   },
   userEmail: {
     fontSize: 14,

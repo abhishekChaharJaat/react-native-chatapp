@@ -11,6 +11,9 @@ import Signup from "./pages/Signup";
 import Toast from "react-native-toast-message";
 import { loadTokenFromStorage } from "./store/authSlice";
 import { View, ActivityIndicator, Text } from "react-native";
+import socketService from "./services/socketService";
+import { addReceivedMessage } from "./store/messagesSlice";
+import { setUserOnline, setUserOffline, setOnlineUsers, clearOnlineUsers } from "./store/onlineUsersSlice";
 
 const Stack = createStackNavigator();
 
@@ -32,6 +35,65 @@ function AppNavigator() {
 
     initializeAuth();
   }, [dispatch]);
+
+  const { user } = useSelector((state) => state.auth);
+
+  useEffect(() => {
+    if (isAuthenticated && user?.id) {
+      // Connect to WebSocket when user is authenticated
+      socketService.connect('http://192.168.31.251:8000', user.id);
+
+      // Set up global message listener
+      const handleGlobalMessage = (data) => {
+        console.log('Global message received:', data);
+        // Add received message to the store
+        dispatch(addReceivedMessage({
+          senderId: data.senderId,
+          message: {
+            id: data.messageId || Date.now().toString(),
+            text: data.message,
+            senderId: data.senderId,
+            timestamp: data.timestamp || new Date().toISOString(),
+          }
+        }));
+      };
+
+      // Handle user online/offline events
+      const handleUserOnlineStatus = (userId) => {
+        console.log('User online:', userId);
+        dispatch(setUserOnline(userId));
+      };
+
+      const handleUserOfflineStatus = (userId) => {
+        console.log('User offline:', userId);
+        dispatch(setUserOffline(userId));
+      };
+
+      // Handle online users list
+      const handleOnlineUsersList = (userIds) => {
+        console.log('Online users:', userIds);
+        dispatch(setOnlineUsers(userIds));
+      };
+
+      // Add listeners
+      socketService.addListener('receive_message', handleGlobalMessage);
+      socketService.addListener('user_online', handleUserOnlineStatus);
+      socketService.addListener('user_offline', handleUserOfflineStatus);
+      socketService.addListener('online_users_list', handleOnlineUsersList);
+
+      return () => {
+        // Clean up listeners on unmount
+        socketService.removeListener('receive_message', handleGlobalMessage);
+        socketService.removeListener('user_online', handleUserOnlineStatus);
+        socketService.removeListener('user_offline', handleUserOfflineStatus);
+        socketService.removeListener('online_users_list', handleOnlineUsersList);
+      };
+    } else {
+      // Disconnect when user logs out
+      socketService.disconnect();
+      dispatch(clearOnlineUsers());
+    }
+  }, [isAuthenticated, user?.id, dispatch]);
 
   if (isLoading) {
     return (

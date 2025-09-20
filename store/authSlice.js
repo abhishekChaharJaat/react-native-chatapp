@@ -22,9 +22,12 @@ export const loginUser = createAsyncThunk(
         return rejectWithValue(data.message || "Login failed");
       }
 
-      // Store token in AsyncStorage
+      // Store token and user ID in AsyncStorage
       if (data.token) {
         await AsyncStorage.setItem("authToken", data.token);
+      }
+      if (data.user?.id) {
+        await AsyncStorage.setItem("userId", data.user.id);
       }
 
       return data;
@@ -52,9 +55,12 @@ export const signupUser = createAsyncThunk(
         return rejectWithValue(data.message || "Signup failed");
       }
 
-      // Store token in AsyncStorage if provided
+      // Store token and user ID in AsyncStorage if provided
       if (data.token) {
         await AsyncStorage.setItem("authToken", data.token);
+      }
+      if (data.user?.id) {
+        await AsyncStorage.setItem("userId", data.user.id);
       }
 
       return data;
@@ -69,6 +75,8 @@ export const loadTokenFromStorage = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const token = await AsyncStorage.getItem("authToken");
+      const userId = await AsyncStorage.getItem("userId");
+
       if (token) {
         // Decode JWT to get user info
         try {
@@ -82,12 +90,15 @@ export const loadTokenFromStorage = createAsyncThunk(
           return {
             token,
             user: {
-              id: decodedToken.id
+              id: userId || decodedToken.id
             }
           };
         } catch (decodeError) {
           console.error("Failed to decode token:", decodeError);
-          return { token };
+          return {
+            token,
+            user: userId ? { id: userId } : null
+          };
         }
       }
       return rejectWithValue("No token found");
@@ -102,6 +113,7 @@ export const logout = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       await AsyncStorage.removeItem("authToken");
+      await AsyncStorage.removeItem("userId");
       return true;
     } catch (error) {
       return rejectWithValue("Failed to logout");
