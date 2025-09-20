@@ -1,7 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'http://192.168.31.251:8000/v1';
+const API_BASE_URL = process.env.API_BASE_URL || 'http://192.168.31.251:8000';
 
 // Async thunk for fetching users
 export const fetchUsers = createAsyncThunk(
@@ -14,7 +14,7 @@ export const fetchUsers = createAsyncThunk(
         return rejectWithValue('No authentication token found');
       }
 
-      const response = await fetch(`${API_BASE_URL}/users`, {
+      const response = await fetch(`${API_BASE_URL}/v1/users`, {
         method: 'GET',
         headers: {
           'Authorization': `${token}`,

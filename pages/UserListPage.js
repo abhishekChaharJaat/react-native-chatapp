@@ -19,7 +19,9 @@ export default function UserListPage({ navigation }) {
   const [sidebarVisible, setSidebarVisible] = useState(false);
 
   const dispatch = useDispatch();
-  const { users, loading, refreshing, error } = useSelector((state) => state.users);
+  const { users, loading, refreshing, error } = useSelector(
+    (state) => state.users
+  );
   const { isAuthenticated } = useSelector((state) => state.auth);
 
   const handleUserPress = (user) => {
@@ -46,7 +48,10 @@ export default function UserListPage({ navigation }) {
 
   useEffect(() => {
     if (error) {
-      if (error.includes("Session expired") || error.includes("No authentication token")) {
+      if (
+        error.includes("Session expired") ||
+        error.includes("No authentication token")
+      ) {
         Alert.alert("Session Expired", "Please login again.");
         dispatch(logout());
         navigation.replace("Login");
@@ -74,7 +79,7 @@ export default function UserListPage({ navigation }) {
       </View>
       <View style={styles.userInfo}>
         <Text style={styles.userName}>{item.name}</Text>
-        <Text style={styles.userEmail}>{item.email}</Text>
+        {/* <Text style={styles.userEmail}>{item.email}</Text> */}
       </View>
       <View style={styles.statusContainer}>
         <View

@@ -1,17 +1,17 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const API_BASE_URL = 'http://192.168.31.251:8000/v1';
+const API_BASE_URL = process.env.API_BASE_URL || "http://192.168.31.251:8000";
 
 // Async thunks for API calls
 export const loginUser = createAsyncThunk(
-  'auth/loginUser',
+  "auth/loginUser",
   async ({ email, password }, { rejectWithValue }) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/signin`, {
-        method: 'POST',
+      const response = await fetch(`${API_BASE_URL}/v1/signin`, {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({ email, password }),
       });
@@ -19,29 +19,29 @@ export const loginUser = createAsyncThunk(
       const data = await response.json();
 
       if (!response.ok) {
-        return rejectWithValue(data.message || 'Login failed');
+        return rejectWithValue(data.message || "Login failed");
       }
 
       // Store token in AsyncStorage
       if (data.token) {
-        await AsyncStorage.setItem('authToken', data.token);
+        await AsyncStorage.setItem("authToken", data.token);
       }
 
       return data;
     } catch (error) {
-      return rejectWithValue('Network error. Please try again.');
+      return rejectWithValue("Network error. Please try again.");
     }
   }
 );
 
 export const signupUser = createAsyncThunk(
-  'auth/signupUser',
+  "auth/signupUser",
   async ({ name, email, password }, { rejectWithValue }) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/signup`, {
-        method: 'POST',
+      const response = await fetch(`${API_BASE_URL}/v1/signup`, {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({ name, email, password }),
       });
@@ -49,50 +49,68 @@ export const signupUser = createAsyncThunk(
       const data = await response.json();
 
       if (!response.ok) {
-        return rejectWithValue(data.message || 'Signup failed');
+        return rejectWithValue(data.message || "Signup failed");
       }
 
       // Store token in AsyncStorage if provided
       if (data.token) {
-        await AsyncStorage.setItem('authToken', data.token);
+        await AsyncStorage.setItem("authToken", data.token);
       }
 
       return data;
     } catch (error) {
-      return rejectWithValue('Network error. Please try again.');
+      return rejectWithValue("Network error. Please try again.");
     }
   }
 );
 
 export const loadTokenFromStorage = createAsyncThunk(
-  'auth/loadTokenFromStorage',
+  "auth/loadTokenFromStorage",
   async (_, { rejectWithValue }) => {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await AsyncStorage.getItem("authToken");
       if (token) {
-        return { token };
+        // Decode JWT to get user info
+        try {
+          const base64Url = token.split('.')[1];
+          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+          const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+          }).join(''));
+          const decodedToken = JSON.parse(jsonPayload);
+
+          return {
+            token,
+            user: {
+              id: decodedToken.id
+            }
+          };
+        } catch (decodeError) {
+          console.error("Failed to decode token:", decodeError);
+          return { token };
+        }
       }
-      return rejectWithValue('No token found');
+      return rejectWithValue("No token found");
     } catch (error) {
-      return rejectWithValue('Failed to load token');
+      return rejectWithValue("Failed to load token");
     }
   }
 );
 
 export const logout = createAsyncThunk(
-  'auth/logout',
+  "auth/logout",
   async (_, { rejectWithValue }) => {
     try {
-      await AsyncStorage.removeItem('authToken');
+      await AsyncStorage.removeItem("authToken");
       return true;
     } catch (error) {
-      return rejectWithValue('Failed to logout');
+      return rejectWithValue("Failed to logout");
     }
   }
 );
 
 const authSlice = createSlice({
-  name: 'auth',
+  name: "auth",
   initialState: {
     user: null,
     token: null,
@@ -152,6 +170,7 @@ const authSlice = createSlice({
       // Load token cases
       .addCase(loadTokenFromStorage.fulfilled, (state, action) => {
         state.token = action.payload.token;
+        state.user = action.payload.user;
         state.isAuthenticated = true;
       })
       .addCase(loadTokenFromStorage.rejected, (state) => {
